@@ -724,7 +724,14 @@ async function dlReceipt(e) {
                   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
     if (isIOS) {
-      // iOSは新しいタブで画像を開く → ユーザーが長押しで「写真に保存」
+      // スタンドアロンモード（ホーム画面追加）ではwindow.open/closeが使えない
+      const isStandalone = window.navigator.standalone === true;
+      if (isStandalone) {
+        showImagePreview(dataURL);
+        btn.innerHTML = orig; btn.disabled = false;
+        return;
+      }
+      // 通常Safari → 新しいタブで開く
       const win = window.open('', '_blank');
       if (win) {
         win.document.write(`
