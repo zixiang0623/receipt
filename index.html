@@ -708,15 +708,95 @@ async function dlReceipt(e) {
   const btn = e.currentTarget;
   const orig = btn.innerHTML;
   btn.innerHTML = '生成中…'; btn.disabled = true;
+
   try {
     const canvas = await html2canvas(document.getElementById('receiptPaper'), {
-      scale: 3, backgroundColor: '#ffffff', useCORS: true, logging: false,
+      scale: 3,
+      backgroundColor: '#ffffff',
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
     });
-    const a = document.createElement('a');
-    a.download = `receipt_${Date.now()}.png`;
-    a.href = canvas.toDataURL('image/png'); a.click();
-  } catch { alert('ダウンロードに失敗しました'); }
-  btn.innerHTML = orig; btn.disabled = false;
+    const dataURL = canvas.toDataURL('image/png');
+
+    // iOS Safari 判定（download属性が無視されるため別処理）
+    const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    if (isIOS) {
+      // iOSは新しいタブで画像を開く → ユーザーが長押しで「写真に保存」
+      const win = window.open('', '_blank');
+      if (win) {
+        win.document.write(`
+          <html><head><title>レシート</title>
+          <meta name="viewport" content="width=device-width,initial-scale=1">
+          <style>body{margin:0;background:#f0ede6;display:flex;flex-direction:column;align-items:center;padding:20px;font-family:sans-serif;}
+          img{max-width:100%;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.2);}
+          p{color:#888;font-size:13px;margin-top:16px;text-align:center;line-height:1.6;}</style>
+          </head><body>
+          <img src="${dataURL}" alt="レシート">
+          <p>画像を長押しして「写真に保存」または「画像を保存」を選んでください</p>
+          </body></html>
+        `);
+        win.document.close();
+      } else {
+        // ポップアップブロックされた場合：ページ内プレビュー表示
+        showImagePreview(dataURL);
+      }
+    } else {
+      // PC / Android: anchor click でダウンロード
+      const a = document.createElement('a');
+      a.download = `receipt_${Date.now()}.png`;
+      a.href = dataURL;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  } catch(err) {
+    console.error(err);
+    alert('生成に失敗しました。再度お試しください。');
+  }
+
+  btn.innerHTML = orig;
+  btn.disabled = false;
+}
+
+// iOSポップアップブロック時のフォールバック：ページ内で画像プレビュー表示
+function showImagePreview(dataURL) {
+  // 既存のプレビューがあれば削除
+  document.getElementById('img-preview-overlay')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'img-preview-overlay';
+  overlay.style.cssText = `
+    position:fixed;inset:0;z-index:300;
+    background:rgba(0,0,0,.85);backdrop-filter:blur(8px);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:20px;gap:16px;
+  `;
+
+  const img = document.createElement('img');
+  img.src = dataURL;
+  img.style.cssText = 'max-width:100%;max-height:70vh;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.4);';
+
+  const msg = document.createElement('p');
+  msg.textContent = '画像を長押しして「写真に保存」を選んでください';
+  msg.style.cssText = 'color:#fff;font-size:14px;text-align:center;line-height:1.7;margin:0;font-family:sans-serif;';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '閉じる';
+  closeBtn.style.cssText = `
+    background:white;color:#1d1d1f;border:none;border-radius:12px;
+    padding:12px 32px;font-size:15px;font-weight:600;cursor:pointer;
+    font-family:sans-serif;
+  `;
+  closeBtn.onclick = () => overlay.remove();
+
+  overlay.appendChild(img);
+  overlay.appendChild(msg);
+  overlay.appendChild(closeBtn);
+  overlay.onclick = (ev) => { if (ev.target === overlay) overlay.remove(); };
+  document.body.appendChild(overlay);
 }
 </script>
 </body>
